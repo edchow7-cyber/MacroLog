@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MacroLog">
+<meta name="theme-color" content="#14291a">
+<title>MacroLog</title>
+<style>
+:root {
+  --bg:#f5f3ef;--surface:#fff;--surface2:#f0ede8;--border:rgba(0,0,0,0.09);
+  --text:#1a1a18;--text2:#6b6860;--text3:#a09d98;
+  --accent:#2d6e47;--accent-light:#e8f4ee;
+  --cal:#d94f4f;--pro:#2d8c5a;--carb:#d4891a;--fat:#6b55c0;--fib:#1a78b4;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);
+  --r:16px;--r-sm:10px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#111712;--surface:#1c2620;--surface2:#232e27;--border:rgba(255,255,255,0.08);
+  --text:#e2ede5;--text2:#7a9478;--text3:#4d6450;--accent:#4caf6e;--accent-light:#1a3022;
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;max-width:480px;margin:0 auto}
+.screen{display:none;flex-direction:column;height:100%}
+.screen.active{display:flex}
+.header{padding:calc(var(--safe-top) + 16px) 20px 14px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.header-title{font-size:17px;font-weight:600;letter-spacing:-0.3px}
+.header-sub{font-size:12px;color:var(--text2);margin-top:1px}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:4px;line-height:1;border-radius:8px;-webkit-tap-highlight-color:transparent}
+.icon-btn:active{background:var(--surface2)}
+.scroll-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(var(--safe-bot) + 16px)}
+.card{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);padding:16px;margin-bottom:12px}
+.card-label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px}
+.macro-row{margin-bottom:13px}
+.macro-row:last-child{margin-bottom:0}
+.macro-meta{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+.macro-name{color:var(--text2);text-transform:capitalize}
+.macro-remaining{font-weight:600}
+.macro-remaining.over{color:var(--cal)}
+.bar-track{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width 0.5s cubic-bezier(.4,0,.2,1)}
+.bar-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:3px}
+textarea{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);color:var(--text);font-family:inherit;font-size:15px;padding:12px 14px;resize:none;outline:none;line-height:1.5;transition:border-color 0.15s}
+textarea:focus{border-color:var(--accent)}
+textarea::placeholder{color:var(--text3)}
+.btn{width:100%;padding:14px;border-radius:var(--r-sm);font-size:15px;font-weight:600;border:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity 0.15s,transform 0.1s}
+.btn:active{transform:scale(0.98)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:disabled{opacity:0.4}
+.btn-success{background:#2d7a4f;color:#fff;margin-top:10px}
+.btn-outline{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-sm{padding:10px 14px;font-size:14px}
+.btn-export{background:none;border:1.5px solid var(--border);color:var(--text2);border-radius:var(--r-sm);padding:11px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px;text-align:left;-webkit-tap-highlight-color:transparent}
+.btn-export:last-child{margin-bottom:0}
+.btn-export:active{background:var(--surface2)}
+.pending-box{background:var(--accent-light);border-radius:var(--r-sm);padding:14px;margin-top:12px}
+.pending-food{font-size:15px;font-weight:600;margin-bottom:3px}
+.pending-note{font-size:12px;color:var(--text2);margin-bottom:10px}
+.pending-dismiss{float:right;background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;margin-top:-2px}
+.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
+.chip{background:var(--surface);border-radius:var(--r-sm);padding:8px 4px;text-align:center;border:1px solid var(--border)}
+.chip-label{font-size:10px;color:var(--text3);margin-bottom:2px}
+.chip-val{font-size:16px;font-weight:700}
+.chip-unit{font-size:10px;color:var(--text3)}
+.entry{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.entry:last-of-type{border-bottom:none}
+.entry-info{flex:1;min-width:0}
+.entry-food{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry-macros{font-size:12px;color:var(--text2);margin-top:2px}
+.entry-del{background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;flex-shrink:0;padding:4px;-webkit-tap-highlight-color:transparent}
+.totals-chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:12px}
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty p{font-size:14px;line-height:1.6}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.setting-label{font-size:15px;text-transform:capitalize}
+.setting-input-wrap{display:flex;align-items:center;gap:6px}
+.setting-input-wrap input[type=number]{width:72px;text-align:right;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:15px;padding:6px 10px;outline:none}
+.setting-input-wrap input[type=number]:focus{border-color:var(--accent)}
+.setting-unit{font-size:13px;color:var(--text3);width:28px}
+.url-input{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);color:var(--text);font-size:13px;padding:10px 12px;outline:none;font-family:inherit}
+.url-input:focus{border-color:var(--accent)}
+.url-input::placeholder{color:var(--text3)}
+.setup-screen{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 24px calc(var(--safe-bot) + 32px)}
+.setup-logo{font-size:48px;margin-bottom:16px}
+.setup-title{font-size:26px;font-weight:700;letter-spacing:-0.5px;margin-bottom:8px}
+.setup-sub{font-size:15px;color:var(--text2);line-height:1.6;margin-bottom:32px}
+.api-input{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text);font-size:14px;padding:13px 14px;outline:none;font-family:monospace;margin-bottom:12px}
+.api-input:focus{border-color:var(--accent)}
+.api-input::placeholder{color:var(--text3);font-family:inherit}
+.setup-hint{font-size:12px;color:var(--text3);text-align:center;margin-top:12px;line-height:1.6}
+.setup-hint a{color:var(--accent)}
+.toast{position:fixed;bottom:calc(var(--safe-bot) + 24px);left:50%;transform:translateX(-50%) translateY(20px);background:#1a2e20;color:#7eca92;border-radius:20px;padding:10px 20px;font-size:13px;font-weight:600;white-space:nowrap;z-index:999;opacity:0;transition:opacity 0.2s,transform 0.2s;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,0.25)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.section-header{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 8px}
+.section-header:first-child{margin-top:0}
+.recipe-card{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
+.recipe-card:last-child{border-bottom:none}
+.recipe-info{flex:1;min-width:0}
+.recipe-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recipe-macros{font-size:12px;color:var(--text2);margin-top:2px}
+.recipe-actions{display:flex;gap:4px;flex-shrink:0}
+.recipe-log-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.recipe-log-btn:active{opacity:0.8}
+.recipe-del-btn{background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:4px;-webkit-tap-highlight-color:transparent}
+.search-input{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);color:var(--text);font-size:15px;padding:10px 14px;outline:none;font-family:inherit;margin-bottom:12px}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text3)}
+.btn-save-recipe{width:100%;padding:11px;font-size:14px;font-weight:600;background:none;border:1.5px solid var(--accent);color:var(--accent);border-radius:var(--r-sm);cursor:pointer;margin-top:8px;-webkit-tap-highlight-color:transparent}
+.btn-save-recipe:active{background:var(--accent-light)}
+.portion-picker{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.portion-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.portion-btns{display:flex;gap:6px;flex-wrap:wrap}
+.portion-btn{flex:1;min-width:44px;padding:8px 4px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent}
+.portion-btn:active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ingredient-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px}
+.ingredient-row:last-child{border-bottom:none}
+.ingredient-name{color:var(--text);font-weight:500;flex:1}
+.ingredient-assumption{color:var(--text3);font-size:12px;margin:0 10px;font-style:italic}
+.ingredient-cal{color:var(--text2);font-size:12px;white-space:nowrap}
+.correction-area{margin-top:10px}
+.correction-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.correction-textarea{width:100%;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text);font-family:inherit;font-size:14px;padding:10px 12px;resize:none;outline:none;line-height:1.5}
+.correction-textarea:focus{border-color:var(--accent)}
+.correction-textarea::placeholder{color:var(--text3)}
+.btn-reestimate{width:100%;padding:11px;font-size:14px;font-weight:600;background:none;border:1.5px solid var(--text3);color:var(--text2);border-radius:var(--r-sm);cursor:pointer;margin-top:8px;-webkit-tap-highlight-color:transparent;display:none}
+.btn-reestimate.visible{display:block}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="screen-setup" class="screen active">
+    <div class="setup-screen">
+      <div class="setup-logo">🍴</div>
+      <div class="setup-title">MacroLog</div>
+      <div class="setup-sub">AI-powered food &amp; macro tracker. Enter your Anthropic API key to get started — stored only on this device.</div>
+      <input id="api-key-input" class="api-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="btn btn-primary" onclick="saveApiKey()">Get started</button>
+      <div class="setup-hint">Get a free API key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a><br>Your key is stored locally and never shared.</div>
+    </div>
+  </div>
+
+  <div id="screen-main" class="screen">
+    <div class="header">
+      <div>
+        <div class="header-title">MacroLog</div>
+        <div class="header-sub" id="date-label"></div>
+        <div style="font-size:11px;color:var(--accent);margin-top:1px;min-height:14px" id="sync-status"></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="icon-btn" id="sync-btn" onclick="syncAll()" title="Sync" style="font-size:18px;display:none">↻</button>
+        <button class="icon-btn" onclick="showScreen('recipes')" title="Recipes" style="font-size:20px">📖</button>
+        <button class="icon-btn" onclick="showScreen('settings')">⚙️</button>
+      </div>
+    </div>
+    <div class="scroll-body">
+      <div class="card" id="macro-bars"></div>
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea id="food-input" rows="3" placeholder='Describe what you ate, or tap 📷 to use a photo…' style="flex:1"></textarea>
+          <button class="icon-btn" onclick="selectPhoto()" style="font-size:24px;padding:6px;flex-shrink:0;margin-top:1px">📷</button>
+        </div>
+        <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(event)">
+        <div id="photo-preview" style="display:none;margin-top:8px;position:relative">
+          <img id="photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;display:block">
+          <button onclick="clearPhoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+        </div>
+        <button class="btn btn-primary" id="analyze-btn" onclick="analyze()" style="margin-top:10px">Estimate macros</button>
+        <div id="pending-area"></div>
+      </div>
+      <div class="card" id="log-card" style="display:none">
+        <div class="card-label">Today's log</div>
+        <div id="log-entries"></div>
+        <div class="totals-chips" id="totals-chips"></div>
+      </div>
+      <div class="empty" id="empty-state">
+        <div class="empty-icon">🍽️</div>
+        <p>No entries yet today.<br>Describe a meal above to get started.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-recipes" class="screen">
+    <div class="header">
+      <button class="icon-btn" onclick="showScreen('main')" style="margin-left:-4px">←</button>
+      <div class="header-title">Recipes</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="scroll-body">
+      <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes…" oninput="renderRecipes()">
+      <div class="card" id="recipes-list-card"><div id="recipes-list"></div></div>
+      <div class="empty" id="recipes-empty" style="display:none">
+        <div class="empty-icon">📖</div>
+        <p>No recipes yet.<br>After estimating a meal, tap<br><strong>Save as recipe</strong> to store it here.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen">
+    <div class="header">
+      <button class="icon-btn" onclick="showScreen('main')" style="margin-left:-4px">←</button>
+      <div class="header-title">Settings</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="scroll-body">
+
+      <div class="section-header">Daily goals</div>
+      <div class="card"><div id="goals-rows"></div></div>
+
+      <div class="section-header">Cloud sync</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.6">Paste your Cloudflare Worker URL to sync your log, recipes, and targets across all devices.</p>
+        <input id="sync-url-input" class="url-input" type="url" placeholder="https://macrolog.yourname.workers.dev">
+      </div>
+
+      <div class="section-header">Export data</div>
+      <div class="card" id="export-card">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">Downloads a CSV file you can open in Numbers, Excel, or any spreadsheet app.</p>
+        <button class="btn-export" onclick="exportData('log')">⬇ Full log (CSV)</button>
+        <button class="btn-export" onclick="exportData('recipes')">⬇ Recipes (CSV)</button>
+        <button class="btn-export" onclick="exportData('targets')">⬇ Targets (CSV)</button>
+      </div>
+
+      <div class="section-header">Account</div>
+      <div class="card">
+        <div class="setting-row">
+          <div class="setting-label">Anthropic API key</div>
+          <button class="btn btn-outline btn-sm" style="width:auto" onclick="resetApiKey()">Change</button>
+        </div>
+        <div class="setting-row" style="border-bottom:none">
+          <div class="setting-label" style="color:var(--cal)">Clear today's log</div>
+          <button class="btn btn-outline btn-sm" style="width:auto;color:var(--cal)" onclick="clearLog()">Clear</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" style="margin-top:8px" onclick="saveSettings()">Save settings</button>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const MACRO_KEYS=['calories','protein','carbs','fat','fiber'];
+const MACRO_COLORS={calories:'var(--cal)',protein:'var(--pro)',carbs:'var(--carb)',fat:'var(--fat)',fiber:'var(--fib)'};
+const MACRO_UNITS={calories:'kcal',protein:'g',carbs:'g',fat:'g',fiber:'g'};
+const DEFAULT_GOALS={calories:2000,protein:150,carbs:200,fat:65,fiber:30};
+
+// ── Storage abstraction ───────────────────────────────
+const S = {
+  isArtifact: !!(typeof window!=='undefined' && window.storage && typeof window.storage.get==='function'),
+  async get(key) {
+    if (this.isArtifact) { try { const r=await window.storage.get(key); return r?r.value:null; } catch { return null; } }
+    try { return localStorage.getItem(key); } catch { return null; }
+  },
+  async set(key,val) {
+    if (this.isArtifact) { try { await window.storage.set(key,String(val)); } catch {} }
+    else { try { localStorage.setItem(key,val); } catch {} }
+  },
+  async remove(key) {
+    if (this.isArtifact) { try { await window.storage.delete(key); } catch {} }
+    else { try { localStorage.removeItem(key); } catch {} }
+  }
+};
+
+let state={goals:{...DEFAULT_GOALS},log:[],syncUrl:'',pending:null,portionFor:null};
+
+async function load() {
+  try {
+    const saved=await S.get('ml_state');
+    if (saved) { const p=JSON.parse(saved); state.goals={...DEFAULT_GOALS,...p.goals}; state.syncUrl=p.syncUrl||''; }
+    const savedLog=await S.get(`ml_log:${getToday()}`);
+    if (savedLog) state.log=JSON.parse(savedLog);
+  } catch(e) { console.error('load error',e); }
+}
+
+async function save() { await S.set('ml_state',JSON.stringify({goals:state.goals,syncUrl:state.syncUrl})); }
+async function saveLog() { await S.set(`ml_log:${getToday()}`,JSON.stringify(state.log)); }
+function getToday() { return new Date().toLocaleDateString('en-CA'); }
+function totals() { return state.log.reduce((a,e)=>{MACRO_KEYS.forEach(k=>a[k]=(a[k]||0)+(e[k]||0));return a;},{calories:0,protein:0,carbs:0,fat:0,fiber:0}); }
+
+function showScreen(name) {
+  try {
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(`screen-${name}`).classList.add('active');
+    if (name==='main') { renderMain(); if (state.syncUrl) syncFromCloud(); }
+    if (name==='settings') renderSettings();
+    if (name==='recipes') { renderRecipes(); if (state.syncUrl) syncRecipesFromCloud().then(renderRecipes); }
+  } catch(e) { console.error('showScreen error:',name,e); }
+}
+
+function renderMain() {
+  document.getElementById('date-label').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  updateSyncBtn(); renderBars(); renderLog();
+}
+
+function renderBars() {
+  const t=totals();
+  const html=MACRO_KEYS.map(k=>{
+    const cur=Math.round(t[k]||0),goal=state.goals[k],pct=Math.min(100,Math.round((cur/goal)*100));
+    const rem=goal-cur,over=rem<0,unit=MACRO_UNITS[k],color=MACRO_COLORS[k];
+    return `<div class="macro-row">
+      <div class="macro-meta"><span class="macro-name">${k}</span><span class="macro-remaining${over?' over':''}">${over?Math.abs(Math.round(rem))+unit+' over':Math.round(rem)+unit+' left'}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--cal)':color}"></div></div>
+      <div class="bar-ends"><span>${cur}${unit}</span><span>${goal}${unit}</span></div>
+    </div>`;
+  }).join('');
+  document.getElementById('macro-bars').innerHTML=`<div class="card-label">Today's macros</div>${html}`;
+}
+
+function renderLog() {
+  const logCard=document.getElementById('log-card'),emptyState=document.getElementById('empty-state');
+  if (!state.log.length) { logCard.style.display='none'; emptyState.style.display=''; return; }
+  logCard.style.display=''; emptyState.style.display='none';
+  const entriesHtml=[...state.log].reverse().map(e=>`
+    <div class="entry">
+      <div class="entry-info">
+        <div class="entry-food">${e.food}</div>
+        <div class="entry-macros">${e.time} · ${Math.round(e.calories)} kcal · P ${Math.round(e.protein)}g · C ${Math.round(e.carbs)}g · F ${Math.round(e.fat)}g · Fi ${Math.round(e.fiber||0)}g</div>
+      </div>
+      <button class="entry-del" onclick="removeEntry(${e.id})">×</button>
+    </div>`).join('');
+  const t=totals();
+  const chipsHtml=MACRO_KEYS.map(k=>`<div class="chip"><div class="chip-label">${k==='calories'?'cal':k==='fiber'?'fiber':k.slice(0,3)}</div><div class="chip-val" style="color:${MACRO_COLORS[k]}">${Math.round(t[k]||0)}</div><div class="chip-unit">${MACRO_UNITS[k]}</div></div>`).join('');
+  document.getElementById('log-entries').innerHTML=entriesHtml;
+  document.getElementById('totals-chips').innerHTML=chipsHtml;
+}
+
+function renderSettings() {
+  document.getElementById('sync-url-input').value=state.syncUrl;
+  const exportCard=document.getElementById('export-card');
+  if (exportCard) exportCard.style.display=state.syncUrl?'':'none';
+  document.getElementById('goals-rows').innerHTML=MACRO_KEYS.map(k=>`
+    <div class="setting-row">
+      <label class="setting-label" for="goal-${k}">${k}</label>
+      <div class="setting-input-wrap">
+        <input type="number" id="goal-${k}" value="${state.goals[k]}">
+        <span class="setting-unit">${MACRO_UNITS[k]}</span>
+      </div>
+    </div>`).join('');
+}
+
+function updateSyncBtn() {
+  const btn=document.getElementById('sync-btn');
+  if (btn) btn.style.display=state.syncUrl?'inline-block':'none';
+}
+
+// ── Cloud sync ────────────────────────────────────────
+async function cloudFetch(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function syncAll() {
+  if (!state.syncUrl) return;
+  const btn=document.getElementById('sync-btn');
+  if (btn) { btn.style.animation='spin 0.7s linear infinite'; btn.disabled=true; }
+  await Promise.all([syncFromCloud(), syncRecipesFromCloud(), syncTargetsFromCloud()]);
+  if (btn) { btn.style.animation=''; btn.disabled=false; }
+  flash('Synced ✓');
+}
+
+async function syncFromCloud() {
+  if (!state.syncUrl) return;
+  try {
+    document.getElementById('sync-status').textContent='Syncing…';
+    const data=await cloudFetch(`${state.syncUrl}?type=log&date=${getToday()}`);
+    if (data.rows) { state.log=data.rows; await saveLog(); renderBars(); renderLog(); }
+    document.getElementById('sync-status').textContent='Synced ✓';
+    setTimeout(()=>{document.getElementById('sync-status').textContent='';},2500);
+  } catch { document.getElementById('sync-status').textContent=''; }
+}
+
+async function syncRecipesFromCloud() {
+  if (!state.syncUrl) return;
+  try { const data=await cloudFetch(`${state.syncUrl}?type=recipes`); if (data.recipes?.length) await saveRecipesStore(data.recipes); } catch {}
+}
+
+async function syncTargetsFromCloud() {
+  if (!state.syncUrl) return;
+  try { const data=await cloudFetch(`${state.syncUrl}?type=targets`); if (data.targets&&Object.keys(data.targets).length) { state.goals={...DEFAULT_GOALS,...data.targets}; await save(); renderBars(); } } catch {}
+}
+
+async function postToCloud(body) {
+  if (!state.syncUrl) return;
+  try { await cloudFetch(state.syncUrl, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); } catch(e) { console.warn('cloud post failed',e); }
+}
+
+// ── Export ────────────────────────────────────────────
+async function exportData(type) {
+  if (!state.syncUrl) { flash('Set up cloud sync first'); return; }
+  try {
+    const url = `${state.syncUrl}?type=export&data=${type}`;
+    const a = document.createElement('a');
+    a.href = url; a.download = `macrolog-${type}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    flash(`Downloading ${type} CSV…`);
+  } catch { flash('Export failed — check sync URL'); }
+}
+
+// ── Photo ─────────────────────────────────────────────
+let photoBase64=null,photoMediaType=null;
+function selectPhoto() { document.getElementById('photo-input').click(); }
+function handlePhotoSelect(e) {
+  const file=e.target.files[0]; if (!file) return;
+  photoMediaType=file.type||'image/jpeg';
+  const reader=new FileReader();
+  reader.onload=ev=>{photoBase64=ev.target.result.split(',')[1];document.getElementById('photo-img').src=ev.target.result;document.getElementById('photo-preview').style.display='block';};
+  reader.readAsDataURL(file); e.target.value='';
+}
+function clearPhoto() { photoBase64=null;photoMediaType=null;document.getElementById('photo-preview').style.display='none';document.getElementById('photo-img').src=''; }
+
+// ── Analyze ───────────────────────────────────────────
+async function analyze(corrections) {
+  const textInput=document.getElementById('food-input').value.trim();
+  if (!textInput&&!photoBase64&&!corrections) return;
+  const apiKey=await S.get('ml_apikey');
+  if (!apiKey) { flash('No API key — check settings'); return; }
+
+  const btn=document.getElementById('analyze-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Estimating…';
+  if (!corrections) { document.getElementById('pending-area').innerHTML=''; state.pending=null; }
+
+  const jsonSchema=`Return ONLY JSON (no markdown):
+{"food":"concise name","ingredients":[{"name":"ingredient","assumption":"portion","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}],"calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N,"notes":"assumptions or empty"}`;
+
+  const basePrompt=corrections
+    ?`Original meal: "${state.pending?.food||textInput}". Corrections: "${corrections}". Re-estimate with these corrections applied.\n${jsonSchema}`
+    :`Estimate macros for: "${textInput}"\n${jsonSchema}`;
+
+  const imagePrompt=`Identify all ingredients and estimate macros.${textInput?' Context: "'+textInput+'"':''}${corrections?' Corrections: "'+corrections+'"':''}\n${jsonSchema}`;
+
+  const userContent=photoBase64
+    ?[{type:'image',source:{type:'base64',media_type:photoMediaType,data:photoBase64}},{type:'text',text:imagePrompt}]
+    :basePrompt;
+
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'You are a precise nutrition expert. Respond ONLY with valid JSON, no markdown, no preamble.',messages:[{role:'user',content:userContent}]})
+    });
+    const data=await res.json();
+    const raw=data.content?.[0]?.text?.replace(/```json|```/g,'').trim();
+    state.pending=JSON.parse(raw);
+    renderPending();
+  } catch(e) { flash('Could not estimate — try again'); console.error(e); }
+  btn.disabled=false; btn.textContent='Estimate macros';
+}
+
+function renderPending() {
+  if (!state.pending) { document.getElementById('pending-area').innerHTML=''; return; }
+  const p=state.pending;
+  const ingredientsHtml=(p.ingredients?.length)
+    ?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Ingredients &amp; assumptions</div>${p.ingredients.map(ing=>`<div class="ingredient-row"><span class="ingredient-name">${ing.name}</span><span class="ingredient-assumption">${ing.assumption}</span><span class="ingredient-cal">${Math.round(ing.calories)} cal</span></div>`).join('')}</div>`:'';
+  const chipsHtml=MACRO_KEYS.map(k=>`<div class="chip"><div class="chip-label">${k==='calories'?'cal':k==='fiber'?'fiber':k.slice(0,3)}</div><div class="chip-val" style="color:${MACRO_COLORS[k]}">${Math.round(p[k]||0)}</div><div class="chip-unit">${MACRO_UNITS[k]}</div></div>`).join('');
+  const syncLabel=state.syncUrl?'Log + sync':'Log it';
+  document.getElementById('pending-area').innerHTML=`
+    <div class="pending-box">
+      <button class="pending-dismiss" onclick="dismissPending()">×</button>
+      <div class="pending-food">${p.food}</div>
+      ${p.notes?`<div class="pending-note">${p.notes}</div>`:''}
+      ${ingredientsHtml}
+      <div class="chips" style="margin-bottom:12px">${chipsHtml}</div>
+      <div class="correction-area">
+        <div class="correction-label">Correct any assumptions</div>
+        <textarea id="correction-input" class="correction-textarea" rows="2" placeholder="e.g. chicken was 6oz, skip the croutons" oninput="toggleReEstimate()"></textarea>
+        <button id="reestimate-btn" class="btn-reestimate" onclick="reEstimate()">Re-estimate with corrections</button>
+      </div>
+      <button class="btn btn-success" style="margin-top:10px" onclick="logEntry()">${syncLabel}</button>
+      <button class="btn-save-recipe" onclick="saveAsRecipe()">Save as recipe</button>
+    </div>`;
+}
+
+function toggleReEstimate() {
+  const val=document.getElementById('correction-input')?.value.trim();
+  const btn=document.getElementById('reestimate-btn');
+  if (btn) btn.classList.toggle('visible',!!val);
+}
+
+async function reEstimate() {
+  const corrections=document.getElementById('correction-input')?.value.trim();
+  if (!corrections) return;
+  const btn=document.getElementById('reestimate-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Re-estimating…'; }
+  await analyze(corrections);
+}
+
+function dismissPending() { state.pending=null; document.getElementById('pending-area').innerHTML=''; }
+
+async function logEntry() {
+  if (!state.pending) return;
+  const entry={...state.pending,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),date:getToday(),id:Date.now()};
+  state.log.push(entry); await saveLog(); renderBars(); renderLog();
+  await postToCloud({action:'log',...entry});
+  flash(state.syncUrl?`Logged "${entry.food}" + synced ✓`:`Logged "${entry.food}" ✓`);
+  state.pending=null; document.getElementById('pending-area').innerHTML=''; document.getElementById('food-input').value=''; clearPhoto();
+}
+
+async function removeEntry(id) {
+  const entry=state.log.find(e=>e.id===id);
+  state.log=state.log.filter(e=>e.id!==id); await saveLog(); renderBars(); renderLog();
+  if (entry) await postToCloud({action:'delete',id,date:entry.date});
+}
+
+// ── Settings ──────────────────────────────────────────
+async function saveSettings() {
+  MACRO_KEYS.forEach(k=>{const v=parseInt(document.getElementById(`goal-${k}`)?.value);if(!isNaN(v))state.goals[k]=v;});
+  state.syncUrl=document.getElementById('sync-url-input').value.trim();
+  await save();
+  await postToCloud({action:'save_targets',...state.goals});
+  flash('Settings saved'); showScreen('main'); updateSyncBtn();
+}
+
+async function saveApiKey() {
+  const key=document.getElementById('api-key-input').value.trim();
+  if (!key) { flash('Please paste your API key'); return; }
+  await S.set('ml_apikey',key);
+  showScreen('main');
+}
+
+async function resetApiKey() {
+  await S.remove('ml_apikey');
+  document.getElementById('api-key-input').value='';
+  showScreen('setup');
+}
+
+async function clearLog() {
+  if (!confirm('Clear all entries for today?')) return;
+  state.log=[]; await saveLog(); renderBars(); renderLog(); flash('Log cleared');
+}
+
+let toastTimer;
+function flash(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── Recipes ───────────────────────────────────────────
+async function loadRecipes() { try { return JSON.parse(await S.get('ml_recipes')||'[]'); } catch { return []; } }
+async function saveRecipesStore(r) { await S.set('ml_recipes',JSON.stringify(r)); }
+
+async function saveAsRecipe() {
+  if (!state.pending) return;
+  const recipes=await loadRecipes();
+  if (recipes.find(r=>r.food.toLowerCase()===state.pending.food.toLowerCase())) { flash(`"${state.pending.food}" already saved`); return; }
+  const recipe={...state.pending,id:Date.now()};
+  recipes.push(recipe); await saveRecipesStore(recipes);
+  await postToCloud({action:'save_recipe',...recipe});
+  flash(`Recipe "${recipe.food}" saved ✓`);
+}
+
+async function logRecipe(id,multiplier) {
+  multiplier=multiplier||1;
+  const recipes=await loadRecipes();
+  const recipe=recipes.find(r=>r.id===id); if (!recipe) return;
+  const scaled={
+    food:multiplier===1?recipe.food:`${multiplier}× ${recipe.food}`,
+    calories:Math.round(recipe.calories*multiplier),protein:Math.round(recipe.protein*multiplier),
+    carbs:Math.round(recipe.carbs*multiplier),fat:Math.round(recipe.fat*multiplier),
+    fiber:Math.round((recipe.fiber||0)*multiplier),notes:recipe.notes||''
+  };
+  const entry={...scaled,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),date:getToday(),id:Date.now()};
+  state.log.push(entry); await saveLog();
+  state.portionFor=null; renderBars(); renderLog();
+  await postToCloud({action:'log',...entry});
+  flash(state.syncUrl?`Logged "${scaled.food}" + synced ✓`:`Logged "${scaled.food}" ✓`);
+  showScreen('main');
+}
+
+async function deleteRecipe(id) {
+  const recipes=(await loadRecipes()).filter(r=>r.id!==id);
+  await saveRecipesStore(recipes); renderRecipes();
+  await postToCloud({action:'delete_recipe',id});
+  flash('Recipe deleted');
+}
+
+function showPortionPicker(id) { state.portionFor=state.portionFor===id?null:id; renderRecipes(); }
+
+async function renderRecipes() {
+  const query=(document.getElementById('recipe-search')?.value||'').toLowerCase();
+  const recipes=(await loadRecipes()).filter(r=>!query||r.food.toLowerCase().includes(query));
+  const listEl=document.getElementById('recipes-list'),emptyEl=document.getElementById('recipes-empty'),cardEl=document.getElementById('recipes-list-card');
+  if (!listEl) return;
+  if (!recipes.length) { cardEl.style.display='none'; emptyEl.style.display=''; return; }
+  cardEl.style.display=''; emptyEl.style.display='none';
+  const PORTIONS=[{label:'¼×',val:0.25},{label:'½×',val:0.5},{label:'¾×',val:0.75},{label:'1×',val:1},{label:'1½×',val:1.5},{label:'2×',val:2}];
+  listEl.innerHTML=recipes.map(r=>{
+    const open=state.portionFor===r.id;
+    const picker=open?`<div class="portion-picker"><div class="portion-label">How much?</div><div class="portion-btns">${PORTIONS.map(p=>`<button class="portion-btn" onclick="logRecipe(${r.id},${p.val})">${p.label}<br><span style="font-size:10px;font-weight:400;color:var(--text3)">${Math.round(r.calories*p.val)} cal</span></button>`).join('')}</div></div>`:'';
+    return `<div class="recipe-card" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="recipe-info"><div class="recipe-name">${r.food}</div><div class="recipe-macros">${Math.round(r.calories)} kcal · P ${Math.round(r.protein)}g · C ${Math.round(r.carbs)}g · F ${Math.round(r.fat)}g · Fi ${Math.round(r.fiber||0)}g</div></div>
+        <div class="recipe-actions">
+          <button class="recipe-log-btn" onclick="showPortionPicker(${r.id})" style="${open?'background:var(--surface2);color:var(--text);border:1px solid var(--border)':''}">${open?'Cancel':'Log'}</button>
+          <button class="recipe-del-btn" onclick="deleteRecipe(${r.id})">×</button>
+        </div>
+      </div>${picker}</div>`;
+  }).join('');
+}
+
+// ── Init ──────────────────────────────────────────────
+(async()=>{
+  await load();
+  const apiKey=await S.get('ml_apikey');
+  showScreen(apiKey?'main':'setup');
+  if (apiKey&&state.syncUrl) { syncFromCloud(); syncRecipesFromCloud(); syncTargetsFromCloud(); }
+})();
+
+document.getElementById('food-input').addEventListener('keydown',e=>{
+  if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); analyze(); }
+});
+</script>
+
+<script>
+const manifest={name:'MacroLog',short_name:'MacroLog',description:'AI-powered food & macro tracker',start_url:'.',display:'standalone',background_color:'#14291a',theme_color:'#14291a',orientation:'portrait',icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%2314291a'/%3E%3Ctext x='256' y='330' text-anchor='middle' font-size='280' font-family='Apple Color Emoji,Segoe UI Emoji,sans-serif'%3E🍴%3C/text%3E%3C/svg%3E",sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+const link=document.createElement('link');link.rel='manifest';link.href=URL.createObjectURL(blob);document.head.appendChild(link);
+</script>
+</body>
+</html>

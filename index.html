@@ -164,10 +164,14 @@ textarea::placeholder{color:var(--text3)}
       <div class="card" id="macro-bars"></div>
       <div class="card">
         <div style="display:flex;gap:8px;align-items:flex-start">
-          <textarea id="food-input" rows="3" placeholder='Describe what you ate, or tap 📷 to use a photo…' style="flex:1"></textarea>
-          <button class="icon-btn" onclick="selectPhoto()" style="font-size:24px;padding:6px;flex-shrink:0;margin-top:1px">📷</button>
+          <textarea id="food-input" rows="3" placeholder='Describe what you ate, or use a photo…' style="flex:1"></textarea>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-top:1px">
+            <button class="icon-btn" onclick="takePhoto()" title="Take photo" style="font-size:22px;padding:5px">📷</button>
+            <button class="icon-btn" onclick="choosePhoto()" title="Choose from library" style="font-size:22px;padding:5px">🖼️</button>
+          </div>
         </div>
-        <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(event)">
+        <input type="file" id="photo-camera" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(event)">
+        <input type="file" id="photo-library" accept="image/*" style="display:none" onchange="handlePhotoSelect(event)">
         <div id="photo-preview" style="display:none;margin-top:8px;position:relative">
           <img id="photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;display:block">
           <button onclick="clearPhoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
@@ -222,8 +226,13 @@ textarea::placeholder{color:var(--text3)}
 
       <div class="section-header">Export data</div>
       <div class="card" id="export-card">
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">Downloads a CSV file you can open in Numbers, Excel, or any spreadsheet app.</p>
-        <button class="btn-export" onclick="exportData('log')">⬇ Full log (CSV)</button>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">Downloads a CSV you can open in Numbers or Excel.</p>
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Log</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+          <button class="btn-export" style="text-align:center;font-size:13px" onclick="exportData('log',30)">⬇ 30 days</button>
+          <button class="btn-export" style="text-align:center;font-size:13px" onclick="exportData('log',60)">⬇ 60 days</button>
+          <button class="btn-export" style="text-align:center;font-size:13px" onclick="exportData('log',0)">⬇ All</button>
+        </div>
         <button class="btn-export" onclick="exportData('recipes')">⬇ Recipes (CSV)</button>
         <button class="btn-export" onclick="exportData('targets')">⬇ Targets (CSV)</button>
       </div>
@@ -395,20 +404,23 @@ async function postToCloud(body) {
 }
 
 // ── Export ────────────────────────────────────────────
-async function exportData(type) {
+async function exportData(type, days) {
   if (!state.syncUrl) { flash('Set up cloud sync first'); return; }
   try {
-    const url = `${state.syncUrl}?type=export&data=${type}`;
+    let url = `${state.syncUrl}?type=export&data=${type}`;
+    if (days) url += `&days=${days}`;
     const a = document.createElement('a');
-    a.href = url; a.download = `macrolog-${type}.csv`;
+    a.href = url;
+    a.download = `macrolog-${type}${days?'-'+days+'days':''}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    flash(`Downloading ${type} CSV…`);
+    flash(`Downloading${days?' '+days+' day':''} ${type} CSV…`);
   } catch { flash('Export failed — check sync URL'); }
 }
 
 // ── Photo ─────────────────────────────────────────────
 let photoBase64=null,photoMediaType=null;
-function selectPhoto() { document.getElementById('photo-input').click(); }
+function takePhoto() { document.getElementById('photo-camera').click(); }
+function choosePhoto() { document.getElementById('photo-library').click(); }
 function handlePhotoSelect(e) {
   const file=e.target.files[0]; if (!file) return;
   photoMediaType=file.type||'image/jpeg';

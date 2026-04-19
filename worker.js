@@ -38,6 +38,26 @@ export default {
 async function handleGet(url, env) {
   const type = url.searchParams.get('type') || 'log';
 
+  if (type === 'history') {
+    const days = parseInt(url.searchParams.get('days') || '7');
+    const history = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const date = d.toLocaleDateString('en-CA');
+      const rows = await env.MACROLOG.get(`log:${date}`, 'json') || [];
+      const totals = rows.reduce((a, e) => ({
+        calories: a.calories + (e.calories || 0),
+        protein:  a.protein  + (e.protein  || 0),
+        carbs:    a.carbs    + (e.carbs    || 0),
+        fat:      a.fat      + (e.fat      || 0),
+        fiber:    a.fiber    + (e.fiber    || 0),
+      }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+      history.push({ date, entries: rows.length, ...totals });
+    }
+    return json({ history: history.reverse() });
+  }
+
   if (type === 'targets') {
     const targets = await env.MACROLOG.get('targets', 'json');
     return json({ targets: targets || null });

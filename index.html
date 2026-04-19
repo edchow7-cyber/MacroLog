@@ -100,6 +100,19 @@ textarea::placeholder{color:var(--text3)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .section-header{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 8px}
 .section-header:first-child{margin-top:0}
+.history-row{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.history-row:last-child{border-bottom:none}
+.history-date{font-size:13px;font-weight:600;width:80px;flex-shrink:0}
+.history-date.today{color:var(--accent)}
+.history-macros{flex:1;font-size:12px;color:var(--text2)}
+.history-cal{font-size:14px;font-weight:700;color:var(--cal);white-space:nowrap;margin-left:8px}
+.history-cal.under{color:var(--pro)}
+.history-bar-wrap{width:100%;height:4px;background:var(--surface2);border-radius:2px;margin-top:4px;overflow:hidden}
+.history-bar-fill{height:100%;border-radius:2px;transition:width 0.5s ease}
+.chart-bar-group{display:flex;flex-direction:column;align-items:center;flex:1;gap:3px}
+.chart-bar-outer{width:100%;background:var(--surface2);border-radius:3px;overflow:hidden;position:relative}
+.chart-bar-inner{border-radius:3px;transition:height 0.5s ease}
+.chart-day-label{font-size:10px;color:var(--text3);text-align:center}
 .recipe-card{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
 .recipe-card:last-child{border-bottom:none}
 .recipe-info{flex:1;min-width:0}
@@ -156,6 +169,7 @@ textarea::placeholder{color:var(--text3)}
       </div>
       <div style="display:flex;gap:4px">
         <button class="icon-btn" id="sync-btn" onclick="syncAll()" title="Sync" style="font-size:18px;display:none">↻</button>
+        <button class="icon-btn" onclick="showScreen('history')" title="History" style="font-size:20px">📅</button>
         <button class="icon-btn" onclick="showScreen('recipes')" title="Recipes" style="font-size:20px">📖</button>
         <button class="icon-btn" onclick="showScreen('settings')">⚙️</button>
       </div>
@@ -187,6 +201,28 @@ textarea::placeholder{color:var(--text3)}
       <div class="empty" id="empty-state">
         <div class="empty-icon">🍽️</div>
         <p>No entries yet today.<br>Describe a meal above to get started.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-history" class="screen">
+    <div class="header">
+      <button class="icon-btn" onclick="showScreen('main')" style="margin-left:-4px">←</button>
+      <div class="header-title">7-Day History</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="scroll-body">
+      <div class="card" id="history-chart-card">
+        <div class="card-label">Calories vs target</div>
+        <div style="position:relative;height:120px;margin-bottom:4px" id="history-chart"></div>
+      </div>
+      <div class="card" id="history-rows-card">
+        <div class="card-label">Daily totals</div>
+        <div id="history-rows"></div>
+      </div>
+      <div class="empty" id="history-empty" style="display:none">
+        <div class="empty-icon">📅</div>
+        <p>No history yet.<br>Start logging meals to see your 7-day summary.</p>
       </div>
     </div>
   </div>
@@ -302,7 +338,97 @@ function showScreen(name) {
     if (name==='main') { renderMain(); if (state.syncUrl) syncFromCloud(); }
     if (name==='settings') renderSettings();
     if (name==='recipes') { renderRecipes(); if (state.syncUrl) syncRecipesFromCloud().then(renderRecipes); }
+    if (name==='history') loadHistory();
   } catch(e) { console.error('showScreen error:',name,e); }
+}
+
+// ── History ───────────────────────────────────────────
+async function loadHistory() {
+  const rowsEl=document.getElementById('history-rows');
+  const chartEl=document.getElementById('history-chart');
+  const emptyEl=document.getElementById('history-empty');
+  const chartCard=document.getElementById('history-chart-card');
+  const rowsCard=document.getElementById('history-rows-card');
+  if (rowsEl) rowsEl.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Loading…</div>';
+
+  let history = [];
+
+  if (state.syncUrl) {
+    try {
+      const data = await cloudFetch(`${state.syncUrl}?type=history&days=7`);
+      if (data.history) history = data.history;
+    } catch {}
+  }
+
+  // Fall back to local storage for any missing days
+  if (!history.length) {
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const date = d.toLocaleDateString('en-CA');
+      const saved = await S.get(`ml_log:${date}`);
+      const rows = saved ? JSON.parse(saved) : [];
+      const t = rows.reduce((a,e)=>({calories:a.calories+(e.calories||0),protein:a.protein+(e.protein||0),carbs:a.carbs+(e.carbs||0),fat:a.fat+(e.fat||0),fiber:a.fiber+(e.fiber||0)}),{calories:0,protein:0,carbs:0,fat:0,fiber:0});
+      history.push({ date, entries: rows.length, ...t });
+    }
+  }
+
+  const hasData = history.some(d => d.entries > 0);
+  if (!hasData) {
+    chartCard.style.display='none'; rowsCard.style.display='none'; emptyEl.style.display='';
+    return;
+  }
+  chartCard.style.display=''; rowsCard.style.display=''; emptyEl.style.display='none';
+
+  const today = new Date().toLocaleDateString('en-CA');
+  const calGoal = state.goals.calories || 2000;
+  const maxCal = Math.max(...history.map(d=>d.calories), calGoal) * 1.1;
+
+  // Chart
+  const chartHtml = `
+    <div style="display:flex;align-items:flex-end;gap:4px;height:100px;padding-bottom:18px">
+      ${history.map(d => {
+        const h = Math.round((d.calories / maxCal) * 100);
+        const isToday = d.date === today;
+        const over = d.calories > calGoal;
+        const color = d.entries === 0 ? 'var(--border)' : over ? 'var(--cal)' : 'var(--pro)';
+        const goalH = Math.round((calGoal / maxCal) * 100);
+        const label = new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'}).slice(0,2);
+        return `<div class="chart-bar-group">
+          <div class="chart-bar-outer" style="height:100px;display:flex;align-items:flex-end">
+            <div style="position:absolute;bottom:${goalH+18}px;left:0;right:0;border-top:1px dashed var(--border)"></div>
+            <div class="chart-bar-inner" style="width:100%;height:${Math.max(2,h)}px;background:${color};opacity:${isToday?1:0.7}"></div>
+          </div>
+          <div class="chart-day-label" style="color:${isToday?'var(--accent)':'var(--text3)'};font-weight:${isToday?600:400}">${label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text3);display:flex;gap:10px;margin-top:2px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--pro);display:inline-block"></span>Under target</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--cal);display:inline-block"></span>Over target</span>
+    </div>`;
+  chartEl.innerHTML = chartHtml;
+
+  // Rows
+  rowsEl.innerHTML = [...history].reverse().map(d => {
+    const isToday = d.date === today;
+    const pct = Math.min(100, Math.round((d.calories / calGoal) * 100));
+    const over = d.calories > calGoal;
+    const dateLabel = isToday ? 'Today' : new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    if (d.entries === 0) return `
+      <div class="history-row">
+        <div class="history-date${isToday?' today':''}">${dateLabel}</div>
+        <div style="flex:1;font-size:12px;color:var(--text3);font-style:italic">No entries</div>
+      </div>`;
+    return `
+      <div class="history-row">
+        <div class="history-date${isToday?' today':''}">${dateLabel}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;color:var(--text2)">P ${Math.round(d.protein)}g · C ${Math.round(d.carbs)}g · F ${Math.round(d.fat)}g · Fi ${Math.round(d.fiber)}g</div>
+          <div class="history-bar-wrap"><div class="history-bar-fill" style="width:${pct}%;background:${over?'var(--cal)':'var(--pro)'}"></div></div>
+        </div>
+        <div class="history-cal ${over?'':'under'}">${Math.round(d.calories)}<span style="font-size:10px;font-weight:400"> kcal</span></div>
+      </div>`;
+  }).join('');
 }
 
 function renderMain() {

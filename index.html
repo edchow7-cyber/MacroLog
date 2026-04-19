@@ -220,6 +220,7 @@ textarea::placeholder{color:var(--text3)}
         <div class="card-label">Daily totals</div>
         <div id="history-rows"></div>
       </div>
+      <div class="card" id="history-avg-card" style="display:none"></div>
       <div class="empty" id="history-empty" style="display:none">
         <div class="empty-icon">📅</div>
         <p>No history yet.<br>Start logging meals to see your 7-day summary.</p>
@@ -409,6 +410,15 @@ async function loadHistory() {
   chartEl.innerHTML = chartHtml;
 
   // Rows
+  const activeDays = history.filter(d => d.entries > 0);
+  const avg = activeDays.length ? {
+    calories: Math.round(activeDays.reduce((s,d)=>s+d.calories,0) / activeDays.length),
+    protein:  Math.round(activeDays.reduce((s,d)=>s+d.protein, 0) / activeDays.length),
+    carbs:    Math.round(activeDays.reduce((s,d)=>s+d.carbs,   0) / activeDays.length),
+    fat:      Math.round(activeDays.reduce((s,d)=>s+d.fat,     0) / activeDays.length),
+    fiber:    Math.round(activeDays.reduce((s,d)=>s+d.fiber,   0) / activeDays.length),
+  } : null;
+
   rowsEl.innerHTML = [...history].reverse().map(d => {
     const isToday = d.date === today;
     const pct = Math.min(100, Math.round((d.calories / calGoal) * 100));
@@ -429,6 +439,25 @@ async function loadHistory() {
         <div class="history-cal ${over?'':'under'}">${Math.round(d.calories)}<span style="font-size:10px;font-weight:400"> kcal</span></div>
       </div>`;
   }).join('');
+
+  // Average card
+  const avgCard = document.getElementById('history-avg-card');
+  if (avg && avgCard) {
+    const calDiff = avg.calories - calGoal;
+    const calColor = calDiff > 0 ? 'var(--cal)' : 'var(--pro)';
+    const calSign = calDiff > 0 ? '+' : '';
+    avgCard.style.display = '';
+    avgCard.innerHTML = `
+      <div class="card-label">${activeDays.length}-day average</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px">
+        <div class="chip"><div class="chip-label">cal</div><div class="chip-val" style="color:${calColor}">${avg.calories}</div><div class="chip-unit">kcal</div></div>
+        <div class="chip"><div class="chip-label">prot</div><div class="chip-val" style="color:var(--pro)">${avg.protein}</div><div class="chip-unit">g</div></div>
+        <div class="chip"><div class="chip-label">carbs</div><div class="chip-val" style="color:var(--carb)">${avg.carbs}</div><div class="chip-unit">g</div></div>
+        <div class="chip"><div class="chip-label">fat</div><div class="chip-val" style="color:var(--fat)">${avg.fat}</div><div class="chip-unit">g</div></div>
+        <div class="chip"><div class="chip-label">fiber</div><div class="chip-val" style="color:var(--fib)">${avg.fiber}</div><div class="chip-unit">g</div></div>
+      </div>
+      <div style="font-size:12px;color:${calColor};font-weight:600">${calSign}${calDiff} kcal vs target on days you logged</div>`;
+  }
 }
 
 function renderMain() {

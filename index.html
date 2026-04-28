@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
-<meta name="app-version" content="1.0.1">
+<meta name="app-version" content="1.0.2">
 <title>MacroLog</title>
 <style>
 :root {
@@ -150,17 +150,6 @@ textarea::placeholder{color:var(--text3)}
 <body>
 <div id="app">
 
-  <div id="screen-setup" class="screen active">
-    <div class="setup-screen">
-      <div class="setup-logo">🍴</div>
-      <div class="setup-title">MacroLog</div>
-      <div class="setup-sub">AI-powered food &amp; macro tracker. Enter your Anthropic API key to get started — stored only on this device.</div>
-      <input id="api-key-input" class="api-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" autocorrect="off" spellcheck="false">
-      <button class="btn btn-primary" onclick="saveApiKey()">Get started</button>
-      <div class="setup-hint">Get a free API key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a><br>Your key is stored locally and never shared.</div>
-    </div>
-  </div>
-
   <div id="screen-main" class="screen">
     <div class="header">
       <div>
@@ -290,11 +279,9 @@ textarea::placeholder{color:var(--text3)}
 
       <div class="section-header">Account</div>
       <div class="card">
-        <div class="setting-row">
-          <div class="setting-label">Anthropic API key</div>
-          <button class="btn btn-outline btn-sm" style="width:auto" onclick="resetApiKey()">Change</button>
-        </div>
-        <div class="setting-row" style="border-bottom:none">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.6">Your Anthropic API key — get one free at <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a></p>
+        <input id="api-key-input" class="url-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" autocorrect="off" spellcheck="false" style="margin-bottom:0">
+        <div class="setting-row" style="margin-top:12px">
           <div class="setting-label" style="color:var(--cal)">Clear today's log</div>
           <button class="btn btn-outline btn-sm" style="width:auto;color:var(--cal)" onclick="clearLog()">Clear</button>
         </div>
@@ -514,7 +501,7 @@ function renderLog() {
   document.getElementById('totals-chips').innerHTML=chipsHtml;
 }
 
-function renderSettings() {
+async function renderSettings() {
   document.getElementById('sync-url-input').value=state.syncUrl;
   const exportCard=document.getElementById('export-card');
   if (exportCard) exportCard.style.display=state.syncUrl?'':'none';
@@ -526,6 +513,9 @@ function renderSettings() {
         <span class="setting-unit">${MACRO_UNITS[k]}</span>
       </div>
     </div>`).join('');
+  const apiKey = await S.get('ml_apikey');
+  const apiInput = document.getElementById('api-key-input');
+  if (apiInput && apiKey) apiInput.value = apiKey;
 }
 
 function updateSyncBtn() {
@@ -699,22 +689,11 @@ async function removeEntry(id) {
 async function saveSettings() {
   MACRO_KEYS.forEach(k=>{const v=parseInt(document.getElementById(`goal-${k}`)?.value);if(!isNaN(v))state.goals[k]=v;});
   state.syncUrl=document.getElementById('sync-url-input').value.trim();
+  const apiKey=document.getElementById('api-key-input')?.value.trim();
+  if (apiKey) await S.set('ml_apikey', apiKey);
   await save();
   await postToCloud({action:'save_targets',...state.goals});
   flash('Settings saved'); showScreen('main'); updateSyncBtn();
-}
-
-async function saveApiKey() {
-  const key=document.getElementById('api-key-input').value.trim();
-  if (!key) { flash('Please paste your API key'); return; }
-  await S.set('ml_apikey',key);
-  showScreen('main');
-}
-
-async function resetApiKey() {
-  await S.remove('ml_apikey');
-  document.getElementById('api-key-input').value='';
-  showScreen('setup');
 }
 
 async function clearLog() {
@@ -850,9 +829,8 @@ async function renderRecipes() {
 // ── Init ──────────────────────────────────────────────
 (async()=>{
   await load();
-  const apiKey=await S.get('ml_apikey');
-  showScreen(apiKey?'main':'setup');
-  if (apiKey&&state.syncUrl) { syncFromCloud(); syncRecipesFromCloud(); syncTargetsFromCloud(); }
+  showScreen('main');
+  if (state.syncUrl) { syncFromCloud(); syncRecipesFromCloud(); syncTargetsFromCloud(); }
 })();
 
 document.getElementById('food-input').addEventListener('keydown',e=>{

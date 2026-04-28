@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
+<meta name="app-version" content="1.0.1">
 <title>MacroLog</title>
 <style>
 :root {
@@ -863,6 +864,20 @@ document.getElementById('food-input').addEventListener('keydown',e=>{
 const manifest={name:'MacroLog',short_name:'MacroLog',description:'AI-powered food & macro tracker',start_url:'.',display:'standalone',background_color:'#14291a',theme_color:'#14291a',orientation:'portrait',icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%2314291a'/%3E%3Ctext x='256' y='330' text-anchor='middle' font-size='280' font-family='Apple Color Emoji,Segoe UI Emoji,sans-serif'%3E🍴%3C/text%3E%3C/svg%3E",sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
 const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
 const link=document.createElement('link');link.rel='manifest';link.href=URL.createObjectURL(blob);document.head.appendChild(link);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version available — reload automatically
+          window.location.reload();
+        }
+      });
+    });
+  });
+}
 </script>
 </body>
 </html>

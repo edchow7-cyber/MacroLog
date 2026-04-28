@@ -198,6 +198,19 @@ textarea::placeholder{color:var(--text3)}
         <div id="log-entries"></div>
         <div class="totals-chips" id="totals-chips"></div>
       </div>
+
+      <div class="card" id="quick-recipes-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleQuickRecipes()">
+          <div class="card-label" style="margin-bottom:0">Quick log a recipe</div>
+          <span id="quick-recipes-chevron" style="font-size:14px;color:var(--text3);transition:transform 0.2s">▼</span>
+        </div>
+        <div id="quick-recipes-body" style="display:none;margin-top:12px">
+          <input type="search" id="quick-recipe-search" class="search-input" placeholder="Search recipes…" oninput="renderQuickRecipes()" style="margin-bottom:8px">
+          <div id="quick-recipes-list"></div>
+          <div id="quick-recipes-empty" style="display:none;font-size:13px;color:var(--text3);padding:8px 0;font-style:italic">No recipes found</div>
+        </div>
+      </div>
+
       <div class="empty" id="empty-state">
         <div class="empty-icon">🍽️</div>
         <p>No entries yet today.<br>Describe a meal above to get started.</p>
@@ -460,9 +473,12 @@ async function loadHistory() {
   }
 }
 
-function renderMain() {
+async function renderMain() {
   document.getElementById('date-label').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   updateSyncBtn(); renderBars(); renderLog();
+  const recipes = await loadRecipes();
+  const qc = document.getElementById('quick-recipes-card');
+  if (qc) qc.style.display = recipes.length ? '' : 'none';
 }
 
 function renderBars() {
@@ -709,6 +725,62 @@ let toastTimer;
 function flash(msg) {
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── Quick recipes (main screen) ───────────────────────
+let quickRecipesOpen = false;
+
+function toggleQuickRecipes() {
+  quickRecipesOpen = !quickRecipesOpen;
+  document.getElementById('quick-recipes-body').style.display = quickRecipesOpen ? '' : 'none';
+  document.getElementById('quick-recipes-chevron').style.transform = quickRecipesOpen ? 'rotate(180deg)' : '';
+  if (quickRecipesOpen) {
+    renderQuickRecipes();
+    setTimeout(() => document.getElementById('quick-recipe-search')?.focus(), 100);
+  }
+}
+
+async function renderQuickRecipes() {
+  const query = (document.getElementById('quick-recipe-search')?.value || '').toLowerCase();
+  const recipes = (await loadRecipes()).filter(r => !query || r.food.toLowerCase().includes(query));
+  const listEl = document.getElementById('quick-recipes-list');
+  const emptyEl = document.getElementById('quick-recipes-empty');
+  if (!listEl) return;
+  if (!recipes.length) { listEl.innerHTML = ''; emptyEl.style.display = ''; return; }
+  emptyEl.style.display = 'none';
+  const PORTIONS = [{label:'¼×',val:0.25},{label:'½×',val:0.5},{label:'¾×',val:0.75},{label:'1×',val:1},{label:'1½×',val:1.5},{label:'2×',val:2}];
+  listEl.innerHTML = recipes.map(r => {
+    const open = state.portionFor === `quick_${r.id}`;
+    const picker = open ? `<div class="portion-picker"><div class="portion-label">How much?</div><div class="portion-btns">${PORTIONS.map(p=>`<button class="portion-btn" onclick="logRecipeQuick(${r.id},${p.val})">${p.label}<br><span style="font-size:10px;font-weight:400;color:var(--text3)">${Math.round(r.calories*p.val)} cal</span></button>`).join('')}</div></div>` : '';
+    return `<div class="recipe-card" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="recipe-info"><div class="recipe-name">${r.food}</div><div class="recipe-macros">${Math.round(r.calories)} kcal · P ${Math.round(r.protein)}g · C ${Math.round(r.carbs)}g · F ${Math.round(r.fat)}g · Fi ${Math.round(r.fiber||0)}g</div></div>
+        <button class="recipe-log-btn" onclick="showQuickPortionPicker(${r.id})" style="${open?'background:var(--surface2);color:var(--text);border:1px solid var(--border)':''}">${open?'Cancel':'Log'}</button>
+      </div>${picker}</div>`;
+  }).join('');
+}
+
+function showQuickPortionPicker(id) {
+  state.portionFor = state.portionFor === `quick_${id}` ? null : `quick_${id}`;
+  renderQuickRecipes();
+}
+
+async function logRecipeQuick(id, multiplier) {
+  multiplier = multiplier || 1;
+  const recipes = await loadRecipes();
+  const recipe = recipes.find(r => r.id === id); if (!recipe) return;
+  const scaled = {
+    food: multiplier === 1 ? recipe.food : `${multiplier}× ${recipe.food}`,
+    calories: Math.round(recipe.calories * multiplier), protein: Math.round(recipe.protein * multiplier),
+    carbs: Math.round(recipe.carbs * multiplier), fat: Math.round(recipe.fat * multiplier),
+    fiber: Math.round((recipe.fiber||0) * multiplier), notes: recipe.notes || ''
+  };
+  const entry = {...scaled, time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), date: getToday(), id: Date.now()};
+  state.log.push(entry); await saveLog();
+  state.portionFor = null;
+  renderBars(); renderLog(); renderQuickRecipes();
+  await postToCloud({action:'log',...entry});
+  flash(state.syncUrl ? `Logged "${scaled.food}" + synced ✓` : `Logged "${scaled.food}" ✓`);
 }
 
 // ── Recipes ───────────────────────────────────────────

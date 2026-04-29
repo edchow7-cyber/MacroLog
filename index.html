@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
-<meta name="app-version" content="1.0.2">
+<meta name="app-version" content="1.0.3">
 <title>MacroLog</title>
 <style>
 :root {
@@ -168,7 +168,7 @@ textarea::placeholder{color:var(--text3)}
       <div class="card" id="macro-bars"></div>
       <div class="card">
         <div style="display:flex;gap:8px;align-items:flex-start">
-          <textarea id="food-input" rows="3" placeholder='Describe what you ate, or use a photo…' style="flex:1"></textarea>
+          <textarea id="food-input" rows="3" placeholder='Describe your meal with portions for best accuracy&#10;e.g. "6oz grilled chicken, 1 cup brown rice, steamed broccoli"' style="flex:1"></textarea>
           <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-top:1px">
             <button class="icon-btn" onclick="takePhoto()" title="Take photo" style="font-size:22px;padding:5px">📷</button>
             <button class="icon-btn" onclick="choosePhoto()" title="Choose from library" style="font-size:22px;padding:5px">🖼️</button>
@@ -288,6 +288,7 @@ textarea::placeholder{color:var(--text3)}
       </div>
 
       <button class="btn btn-primary" style="margin-top:8px" onclick="saveSettings()">Save settings</button>
+      <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px" id="version-label"></div>
     </div>
   </div>
 
@@ -299,6 +300,7 @@ const MACRO_KEYS=['calories','protein','carbs','fat','fiber'];
 const MACRO_COLORS={calories:'var(--cal)',protein:'var(--pro)',carbs:'var(--carb)',fat:'var(--fat)',fiber:'var(--fib)'};
 const MACRO_UNITS={calories:'kcal',protein:'g',carbs:'g',fat:'g',fiber:'g'};
 const DEFAULT_GOALS={calories:2000,protein:150,carbs:200,fat:65,fiber:30};
+const APP_VERSION='1.0.3';
 
 // ── Storage abstraction ───────────────────────────────
 const S = {
@@ -516,6 +518,8 @@ async function renderSettings() {
   const apiKey = await S.get('ml_apikey');
   const apiInput = document.getElementById('api-key-input');
   if (apiInput && apiKey) apiInput.value = apiKey;
+  const versionEl = document.getElementById('version-label');
+  if (versionEl) versionEl.textContent = `MacroLog v${APP_VERSION}`;
 }
 
 function updateSyncBtn() {
@@ -597,20 +601,39 @@ async function analyze(corrections) {
   const textInput=document.getElementById('food-input').value.trim();
   if (!textInput&&!photoBase64&&!corrections) return;
   const apiKey=await S.get('ml_apikey');
-  if (!apiKey) { flash('No API key — check settings'); return; }
+  if (!apiKey) { flash('No API key — add it in ⚙️ Settings'); return; }
 
   const btn=document.getElementById('analyze-btn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Estimating…';
   if (!corrections) { document.getElementById('pending-area').innerHTML=''; state.pending=null; }
 
-  const jsonSchema=`Return ONLY JSON (no markdown):
-{"food":"concise name","ingredients":[{"name":"ingredient","assumption":"portion","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}],"calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N,"notes":"assumptions or empty"}`;
+  const jsonSchema=`Return ONLY valid JSON (no markdown, no preamble):
+{"food":"concise meal name","ingredients":[{"name":"ingredient name","assumption":"exact portion size assumed e.g. 6oz, 1 cup, 2 tbsp","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}],"calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N,"notes":"key assumptions made or empty string"}`;
+
+  const systemPrompt = `You are an expert registered dietitian with deep knowledge of food composition databases (USDA, NIH). Your macro estimates are precise and evidence-based.
+
+Rules:
+- Always specify exact portion sizes in your ingredient assumptions (oz, g, cups, tbsp etc.)
+- Use standard cooked weights, not raw, unless specified
+- Account for cooking oils, sauces, and dressings even if not explicitly mentioned
+- For restaurant meals, use typical restaurant portion sizes which are usually larger than home portions
+- When photo and text are both provided, use both sources together for maximum accuracy
+- Break every meal into individual ingredients — never estimate a dish as a single item
+- Double-check your totals: the sum of ingredient calories must equal the total calories`;
 
   const basePrompt=corrections
-    ?`Original meal: "${state.pending?.food||textInput}". Corrections: "${corrections}". Re-estimate with these corrections applied.\n${jsonSchema}`
-    :`Estimate macros for: "${textInput}"\n${jsonSchema}`;
+    ?`Original meal: "${state.pending?.food||textInput}". User corrections: "${corrections}". Re-estimate all macros with these corrections applied. Be precise about the corrected portions.\n\n${jsonSchema}`
+    :`Estimate the complete macro breakdown for this meal: "${textInput}"\n\nBe specific about every ingredient and its portion size.\n\n${jsonSchema}`;
 
-  const imagePrompt=`Identify all ingredients and estimate macros.${textInput?' Context: "'+textInput+'"':''}${corrections?' Corrections: "'+corrections+'"':''}\n${jsonSchema}`;
+  const imagePrompt=`Carefully analyze this meal photo and estimate complete macros.${textInput?'\n\nAdditional context from user: "'+textInput+'"':''}${corrections?'\n\nUser corrections: "'+corrections+'"':''}
+
+Look carefully at:
+- Portion sizes relative to the plate/bowl
+- Cooking method (fried, grilled, steamed etc.)
+- Any visible sauces, dressings, or toppings
+- Approximate weight/volume of each component
+
+${jsonSchema}`;
 
   const userContent=photoBase64
     ?[{type:'image',source:{type:'base64',media_type:photoMediaType,data:photoBase64}},{type:'text',text:imagePrompt}]
@@ -620,7 +643,16 @@ async function analyze(corrections) {
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'You are a precise nutrition expert. Respond ONLY with valid JSON, no markdown, no preamble.',messages:[{role:'user',content:userContent}]})
+      body:JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:1500,
+        system:[{
+          type:'text',
+          text:systemPrompt,
+          cache_control:{type:'ephemeral'}
+        }],
+        messages:[{role:'user',content:userContent}]
+      })
     });
     const data=await res.json();
     const raw=data.content?.[0]?.text?.replace(/```json|```/g,'').trim();

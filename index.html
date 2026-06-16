@@ -437,7 +437,7 @@ async function loadHistory() {
         return `<div class="chart-bar-group">
           <div class="chart-bar-outer" style="height:100px;display:flex;align-items:flex-end">
             <div style="position:absolute;bottom:${goalH+18}px;left:0;right:0;border-top:1px dashed var(--border)"></div>
-            <div class="chart-bar-inner" style="width:100%;height:${Math.max(2,h)}px;background:${color};opacity:${isToday?1.0.8}"></div>
+            <div class="chart-bar-inner" style="width:100%;height:${Math.max(2,h)}px;background:${color};opacity:${isToday?1:0.7}"></div>
           </div>
           <div class="chart-day-label" style="color:${isToday?'var(--accent)':'var(--text3)'};font-weight:${isToday?600:400}">${label}</div>
         </div>`;

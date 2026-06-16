@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
-<meta name="app-version" content="1.0.5">
+<meta name="app-version" content="1.0.7">
 <title>MacroLog</title>
 <style>
 :root {
@@ -145,6 +145,12 @@ textarea::placeholder{color:var(--text3)}
 .correction-textarea::placeholder{color:var(--text3)}
 .btn-reestimate{width:100%;padding:11px;font-size:14px;font-weight:600;background:none;border:1.5px solid var(--text3);color:var(--text2);border-radius:var(--r-sm);cursor:pointer;margin-top:8px;-webkit-tap-highlight-color:transparent;display:none}
 .btn-reestimate.visible{display:block}
+.builder-ingredient-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.builder-ingredient-row:last-child{border-bottom:none}
+.builder-ingredient-info{flex:1;min-width:0}
+.builder-ingredient-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.builder-ingredient-macros{font-size:12px;color:var(--text2);margin-top:2px}
+.builder-ingredient-del{background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:4px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 </style>
 </head>
 <body>
@@ -173,10 +179,12 @@ textarea::placeholder{color:var(--text3)}
           <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-top:1px">
             <button class="icon-btn" onclick="takePhoto()" title="Take photo" style="font-size:22px;padding:5px">📷</button>
             <button class="icon-btn" onclick="choosePhoto()" title="Choose from library" style="font-size:22px;padding:5px">🖼️</button>
+            <button class="icon-btn" onclick="scanBarcode()" title="Scan barcode" style="font-size:22px;padding:5px">｜⃞</button>
           </div>
         </div>
         <input type="file" id="photo-camera" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(event)">
         <input type="file" id="photo-library" accept="image/*" style="display:none" onchange="handlePhotoSelect(event)">
+        <input type="file" id="barcode-input" accept="image/*" capture="environment" style="display:none" onchange="handleBarcodeImage(event)">
         <div id="photo-preview" style="display:none;margin-top:8px;position:relative">
           <img id="photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;display:block">
           <button onclick="clearPhoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
@@ -235,15 +243,43 @@ textarea::placeholder{color:var(--text3)}
     <div class="header">
       <button class="icon-btn" onclick="showScreen('main')" style="margin-left:-4px">←</button>
       <div class="header-title">Recipes</div>
-      <div style="width:30px"></div>
+      <button class="icon-btn" onclick="showScreen('recipe-builder')" title="Build a recipe" style="font-size:22px">＋</button>
     </div>
     <div class="scroll-body">
       <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes…" oninput="renderRecipes()">
       <div class="card" id="recipes-list-card"><div id="recipes-list"></div></div>
       <div class="empty" id="recipes-empty" style="display:none">
         <div class="empty-icon">📖</div>
-        <p>No recipes yet.<br>After estimating a meal, tap<br><strong>Save as recipe</strong> to store it here.</p>
+        <p>No recipes yet.<br>Estimate a meal and tap <strong>Save as recipe</strong>,<br>or tap ＋ to build one from scratch.</p>
       </div>
+    </div>
+  </div>
+
+  <div id="screen-recipe-builder" class="screen">
+    <div class="header">
+      <button class="icon-btn" onclick="showScreen('recipes')" style="margin-left:-4px">←</button>
+      <div class="header-title">Recipe Builder</div>
+      <div style="width:30px"></div>
+    </div>
+    <div class="scroll-body">
+      <div class="card">
+        <div class="card-label">Recipe name</div>
+        <input id="builder-name" type="text" placeholder="e.g. Ninja Creami, Morning oats…" class="url-input" style="margin-bottom:0" autocorrect="on">
+      </div>
+      <div class="card">
+        <div class="card-label">Add an ingredient</div>
+        <div style="display:flex;gap:8px">
+          <input id="builder-ingredient" type="text" placeholder='e.g. "2 cups Fairlife 2% milk"' class="url-input" style="flex:1" autocorrect="on">
+          <button onclick="addBuilderIngredient()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent" id="builder-add-btn">Add</button>
+        </div>
+        <div id="builder-status" style="font-size:13px;color:var(--text2);margin-top:8px;display:none"></div>
+      </div>
+      <div class="card" id="builder-ingredients-card" style="display:none">
+        <div class="card-label">Ingredients</div>
+        <div id="builder-ingredients-list"></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)" id="builder-totals"></div>
+      </div>
+      <button class="btn btn-success" id="builder-save-btn" style="display:none;margin-bottom:12px" onclick="saveBuiltRecipe()">Save recipe</button>
     </div>
   </div>
 
@@ -300,7 +336,7 @@ const MACRO_KEYS=['calories','protein','carbs','fat','fiber'];
 const MACRO_COLORS={calories:'var(--cal)',protein:'var(--pro)',carbs:'var(--carb)',fat:'var(--fat)',fiber:'var(--fib)'};
 const MACRO_UNITS={calories:'kcal',protein:'g',carbs:'g',fat:'g',fiber:'g'};
 const DEFAULT_GOALS={calories:2000,protein:150,carbs:200,fat:65,fiber:30};
-const APP_VERSION='1.0.5';
+const APP_VERSION='1.0.7';
 
 // ── Storage abstraction ───────────────────────────────
 const S = {
@@ -343,6 +379,7 @@ function showScreen(name) {
     if (name==='settings') renderSettings();
     if (name==='recipes') { renderRecipes(); if (state.syncUrl) syncRecipesFromCloud().then(renderRecipes); }
     if (name==='history') loadHistory();
+    if (name==='recipe-builder') initRecipeBuilder();
   } catch(e) { console.error('showScreen error:',name,e); }
 }
 
@@ -756,10 +793,12 @@ function flash(msg) {
 
 // ── Inline recipe search ──────────────────────────────
 async function searchRecipesInline() {
-  const query = document.getElementById('food-input').value.trim().toLowerCase();
+  const query = document.getElementById('food-input')?.value.trim().toLowerCase();
   const suggestionsEl = document.getElementById('recipe-suggestions');
   const listEl = document.getElementById('recipe-suggestions-list');
   const analyzeBtn = document.getElementById('analyze-btn');
+
+  if (!suggestionsEl || !listEl || !analyzeBtn) return;
 
   // If photo attached, always go to AI
   if (photoBase64) {
@@ -775,7 +814,19 @@ async function searchRecipesInline() {
     return;
   }
 
-  const recipes = (await loadRecipes()).filter(r => r.food.toLowerCase().includes(query));
+  // Try local first, fall back to cloud if empty
+  let allRecipes = await loadRecipes();
+  if (!allRecipes.length && state.syncUrl) {
+    try {
+      const data = await cloudFetch(`${state.syncUrl}?type=recipes`);
+      if (data.recipes?.length) {
+        await saveRecipesStore(data.recipes);
+        allRecipes = data.recipes;
+      }
+    } catch {}
+  }
+
+  const recipes = allRecipes.filter(r => r.food.toLowerCase().includes(query));
 
   if (!recipes.length) {
     suggestionsEl.style.display = 'none';
@@ -783,7 +834,6 @@ async function searchRecipesInline() {
     return;
   }
 
-  // Show top 5 matches
   const PORTIONS=[{label:'¼×',val:0.25},{label:'½×',val:0.5},{label:'¾×',val:0.75},{label:'1×',val:1},{label:'1½×',val:1.5},{label:'2×',val:2}];
   listEl.innerHTML = recipes.slice(0,5).map(r => {
     const open = state.portionFor === `inline_${r.id}`;
@@ -796,7 +846,6 @@ async function searchRecipesInline() {
   }).join('');
 
   suggestionsEl.style.display = '';
-  // Move AI button inside suggestions, hide the standalone one
   analyzeBtn.style.display = 'none';
 }
 
@@ -825,6 +874,170 @@ async function logRecipeInline(id, multiplier) {
   renderBars(); renderLog();
   await postToCloud({action:'log',...entry});
   flash(state.syncUrl ? `Logged "${scaled.food}" + synced ✓` : `Logged "${scaled.food}" ✓`);
+}
+
+// ── Barcode scanner ───────────────────────────────────
+function scanBarcode() { document.getElementById('barcode-input').click(); }
+
+async function handleBarcodeImage(e) {
+  const file = e.target.files[0]; if (!file) return;
+  e.target.value = '';
+
+  if (!('BarcodeDetector' in window)) {
+    flash('Barcode scanning needs iOS 17.4+ or Chrome');
+    return;
+  }
+
+  flash('Scanning barcode…');
+  try {
+    const img = await createImageBitmap(file);
+    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
+    const barcodes = await detector.detect(img);
+    if (!barcodes.length) { flash('No barcode found — try a clearer photo'); return; }
+    await lookupBarcode(barcodes[0].rawValue);
+  } catch(err) { flash('Could not scan — try again'); console.error(err); }
+}
+
+async function lookupBarcode(code) {
+  flash('Looking up product…');
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+    const data = await res.json();
+    if (data.status === 0 || !data.product) { flash('Product not found — try describing it manually'); return; }
+    const p = data.product, n = p.nutriments || {};
+    const serving = p.serving_size || '100g';
+    // Prefer per-serving values, fall back to per-100g
+    const cal     = n['energy-kcal_serving'] ?? n['energy-kcal_100g'] ?? 0;
+    const protein = n['proteins_serving']    ?? n['proteins_100g']    ?? 0;
+    const carbs   = n['carbohydrates_serving'] ?? n['carbohydrates_100g'] ?? 0;
+    const fat     = n['fat_serving']         ?? n['fat_100g']         ?? 0;
+    const fiber   = n['fiber_serving']       ?? n['fiber_100g']       ?? 0;
+    const name    = p.product_name_en || p.product_name || 'Unknown product';
+
+    state.pending = {
+      food: name,
+      calories: Math.round(cal), protein: Math.round(protein),
+      carbs: Math.round(carbs), fat: Math.round(fat), fiber: Math.round(fiber),
+      ingredients: [{ name, assumption: serving, calories: Math.round(cal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat), fiber: Math.round(fiber) }],
+      notes: `Barcode ${code} · Per ${serving}`
+    };
+    renderPending();
+    flash('');
+  } catch(err) { flash('Lookup failed — check your connection'); console.error(err); }
+}
+
+// ── Recipe builder ────────────────────────────────────
+let builderIngredients = [];
+
+function initRecipeBuilder() {
+  builderIngredients = [];
+  const nameEl = document.getElementById('builder-name');
+  const ingEl  = document.getElementById('builder-ingredient');
+  if (nameEl) nameEl.value = '';
+  if (ingEl)  ingEl.value  = '';
+  renderBuilderIngredients();
+}
+
+async function addBuilderIngredient() {
+  const ingEl  = document.getElementById('builder-ingredient');
+  const input  = ingEl?.value.trim(); if (!input) return;
+  const apiKey = await S.get('ml_apikey');
+  if (!apiKey) { flash('No API key — add it in ⚙️ Settings'); return; }
+
+  const btn    = document.getElementById('builder-add-btn');
+  const status = document.getElementById('builder-status');
+  btn.disabled = true; btn.textContent = '…';
+  status.style.display = ''; status.textContent = `Estimating "${input}"…`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 400,
+        system: 'You are a precise nutrition expert. Respond ONLY with valid JSON, no markdown.',
+        messages: [{ role:'user', content:`Estimate macros for this single ingredient/item: "${input}"\nReturn ONLY JSON: {"name":"ingredient name","assumption":"exact portion","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}` }]
+      })
+    });
+    const data = await res.json();
+    const raw  = data.content?.[0]?.text?.replace(/```json|```/g,'').trim();
+    const item = JSON.parse(raw);
+    builderIngredients.push({ ...item, id: Date.now() });
+    ingEl.value = '';
+    renderBuilderIngredients();
+    status.style.display = 'none';
+  } catch(err) { flash('Could not estimate — try again'); console.error(err); }
+  btn.disabled = false; btn.textContent = 'Add';
+}
+
+function removeBuilderIngredient(id) {
+  builderIngredients = builderIngredients.filter(i => i.id !== id);
+  renderBuilderIngredients();
+}
+
+function renderBuilderIngredients() {
+  const card    = document.getElementById('builder-ingredients-card');
+  const list    = document.getElementById('builder-ingredients-list');
+  const totals  = document.getElementById('builder-totals');
+  const saveBtn = document.getElementById('builder-save-btn');
+  if (!card) return;
+
+  if (!builderIngredients.length) {
+    card.style.display = 'none'; saveBtn.style.display = 'none'; return;
+  }
+  card.style.display = ''; saveBtn.style.display = '';
+
+  list.innerHTML = builderIngredients.map(i => `
+    <div class="builder-ingredient-row">
+      <div class="builder-ingredient-info">
+        <div class="builder-ingredient-name">${i.name}</div>
+        <div class="builder-ingredient-macros">${i.assumption} · ${Math.round(i.calories)} kcal · P ${Math.round(i.protein)}g · C ${Math.round(i.carbs)}g · F ${Math.round(i.fat)}g · Fi ${Math.round(i.fiber||0)}g</div>
+      </div>
+      <button class="builder-ingredient-del" onclick="removeBuilderIngredient(${i.id})">×</button>
+    </div>`).join('');
+
+  const t = builderIngredients.reduce((a,i) => ({
+    calories: a.calories + (i.calories||0), protein: a.protein + (i.protein||0),
+    carbs: a.carbs + (i.carbs||0), fat: a.fat + (i.fat||0), fiber: a.fiber + (i.fiber||0)
+  }), { calories:0, protein:0, carbs:0, fat:0, fiber:0 });
+
+  totals.innerHTML = MACRO_KEYS.map(k => `
+    <div class="chip">
+      <div class="chip-label">${k==='calories'?'cal':k==='fiber'?'fiber':k.slice(0,3)}</div>
+      <div class="chip-val" style="color:${MACRO_COLORS[k]}">${Math.round(t[k]||0)}</div>
+      <div class="chip-unit">${MACRO_UNITS[k]}</div>
+    </div>`).join('');
+}
+
+async function saveBuiltRecipe() {
+  const nameEl = document.getElementById('builder-name');
+  const name   = nameEl?.value.trim();
+  if (!name) { flash('Give your recipe a name first'); nameEl?.focus(); return; }
+  if (!builderIngredients.length) { flash('Add at least one ingredient'); return; }
+
+  const t = builderIngredients.reduce((a,i) => ({
+    calories: a.calories + (i.calories||0), protein: a.protein + (i.protein||0),
+    carbs: a.carbs + (i.carbs||0), fat: a.fat + (i.fat||0), fiber: a.fiber + (i.fiber||0)
+  }), { calories:0, protein:0, carbs:0, fat:0, fiber:0 });
+
+  const recipe = {
+    food: name,
+    calories: Math.round(t.calories), protein: Math.round(t.protein),
+    carbs: Math.round(t.carbs), fat: Math.round(t.fat), fiber: Math.round(t.fiber),
+    notes: builderIngredients.map(i => `${i.assumption} ${i.name}`).join(', '),
+    id: Date.now()
+  };
+
+  const recipes = await loadRecipes();
+  if (recipes.find(r => r.food.toLowerCase() === name.toLowerCase())) {
+    flash(`"${name}" already exists — rename it`); return;
+  }
+  recipes.push(recipe);
+  await saveRecipesStore(recipes);
+  await postToCloud({ action:'save_recipe', ...recipe });
+  flash(`Recipe "${name}" saved ✓`);
+  showScreen('recipes');
 }
 
 // ── Recipes ───────────────────────────────────────────
@@ -920,6 +1133,13 @@ function handleFoodInputEvent(e) {
 ['input','keyup','keydown','compositionend','change'].forEach(evt =>
   foodInput.addEventListener(evt, handleFoodInputEvent)
 );
+
+// Enter key in recipe builder
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement?.id === 'builder-ingredient') {
+    e.preventDefault(); addBuilderIngredient();
+  }
+});
 </script>
 
 <script>

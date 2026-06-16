@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
-<meta name="app-version" content="1.0.8">
+<meta name="app-version" content="1.0.9">
 <title>MacroLog</title>
 <style>
 :root {
@@ -336,7 +336,7 @@ const MACRO_KEYS=['calories','protein','carbs','fat','fiber'];
 const MACRO_COLORS={calories:'var(--cal)',protein:'var(--pro)',carbs:'var(--carb)',fat:'var(--fat)',fiber:'var(--fib)'};
 const MACRO_UNITS={calories:'kcal',protein:'g',carbs:'g',fat:'g',fiber:'g'};
 const DEFAULT_GOALS={calories:2000,protein:150,carbs:200,fat:65,fiber:30};
-const APP_VERSION='1.0.8';
+const APP_VERSION='1.0.9';
 
 // ── Storage abstraction ───────────────────────────────
 const S = {
@@ -883,19 +883,37 @@ async function handleBarcodeImage(e) {
   const file = e.target.files[0]; if (!file) return;
   e.target.value = '';
 
-  if (!('BarcodeDetector' in window)) {
-    flash('Barcode scanning needs iOS 17.4+ or Chrome');
-    return;
-  }
-
-  flash('Scanning barcode…');
+  flash('Loading barcode scanner…');
   try {
-    const img = await createImageBitmap(file);
-    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
-    const barcodes = await detector.detect(img);
-    if (!barcodes.length) { flash('No barcode found — try a clearer photo'); return; }
-    await lookupBarcode(barcodes[0].rawValue);
-  } catch(err) { flash('Could not scan — try again'); console.error(err); }
+    // ZXing works on all browsers including iOS Safari (no BarcodeDetector needed)
+    await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js');
+    flash('Scanning barcode…');
+    const url = URL.createObjectURL(file);
+    try {
+      const reader = new window.ZXing.BrowserMultiFormatReader();
+      const result = await reader.decodeFromImageUrl(url);
+      if (!result?.text) { flash('No barcode found — try a clearer photo'); return; }
+      await lookupBarcode(result.text);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch(err) {
+    if (err?.name === 'NotFoundException' || err?.message?.includes('No MultiFormat') || err?.message?.includes('not found')) {
+      flash('No barcode found — try a clearer, well-lit photo');
+    } else {
+      flash('Could not scan — try again');
+      console.error(err);
+    }
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
 }
 
 async function lookupBarcode(code) {

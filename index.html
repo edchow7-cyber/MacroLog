@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MacroLog">
 <meta name="theme-color" content="#14291a">
-<meta name="app-version" content="1.0.7">
+<meta name="app-version" content="1.0.8">
 <title>MacroLog</title>
 <style>
 :root {
@@ -336,7 +336,7 @@ const MACRO_KEYS=['calories','protein','carbs','fat','fiber'];
 const MACRO_COLORS={calories:'var(--cal)',protein:'var(--pro)',carbs:'var(--carb)',fat:'var(--fat)',fiber:'var(--fib)'};
 const MACRO_UNITS={calories:'kcal',protein:'g',carbs:'g',fat:'g',fiber:'g'};
 const DEFAULT_GOALS={calories:2000,protein:150,carbs:200,fat:65,fiber:30};
-const APP_VERSION='1.0.7';
+const APP_VERSION='1.0.8';
 
 // ── Storage abstraction ───────────────────────────────
 const S = {
@@ -437,7 +437,7 @@ async function loadHistory() {
         return `<div class="chart-bar-group">
           <div class="chart-bar-outer" style="height:100px;display:flex;align-items:flex-end">
             <div style="position:absolute;bottom:${goalH+18}px;left:0;right:0;border-top:1px dashed var(--border)"></div>
-            <div class="chart-bar-inner" style="width:100%;height:${Math.max(2,h)}px;background:${color};opacity:${isToday?1:0.7}"></div>
+            <div class="chart-bar-inner" style="width:100%;height:${Math.max(2,h)}px;background:${color};opacity:${isToday?1.0.8}"></div>
           </div>
           <div class="chart-day-label" style="color:${isToday?'var(--accent)':'var(--text3)'};font-weight:${isToday?600:400}">${label}</div>
         </div>`;
@@ -947,28 +947,83 @@ async function addBuilderIngredient() {
   const btn    = document.getElementById('builder-add-btn');
   const status = document.getElementById('builder-status');
   btn.disabled = true; btn.textContent = '…';
-  status.style.display = ''; status.textContent = `Estimating "${input}"…`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 400,
-        system: 'You are a precise nutrition expert. Respond ONLY with valid JSON, no markdown.',
-        messages: [{ role:'user', content:`Estimate macros for this single ingredient/item: "${input}"\nReturn ONLY JSON: {"name":"ingredient name","assumption":"exact portion","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}` }]
-      })
-    });
-    const data = await res.json();
-    const raw  = data.content?.[0]?.text?.replace(/```json|```/g,'').trim();
-    const item = JSON.parse(raw);
-    builderIngredients.push({ ...item, id: Date.now() });
-    ingEl.value = '';
-    renderBuilderIngredients();
-    status.style.display = 'none';
-  } catch(err) { flash('Could not estimate — try again'); console.error(err); }
+    // Step 1 — try Open Food Facts first
+    status.style.display = ''; status.textContent = `Searching database for "${input}"…`;
+    const offResult = await tryOpenFoodFacts(input);
+
+    if (offResult) {
+      // Good database match found
+      builderIngredients.push({ ...offResult, id: Date.now(), source: 'database' });
+      ingEl.value = '';
+      renderBuilderIngredients();
+      status.style.display = 'none';
+    } else {
+      // Fall back to Claude
+      status.textContent = `Estimating "${input}" with AI…`;
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 400,
+          system: 'You are a precise nutrition expert. Respond ONLY with valid JSON, no markdown.',
+          messages: [{ role:'user', content:`Estimate macros for this single ingredient/item: "${input}"\nReturn ONLY JSON: {"name":"ingredient name","assumption":"exact portion","calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}` }]
+        })
+      });
+      const data = await res.json();
+      const raw  = data.content?.[0]?.text?.replace(/```json|```/g,'').trim();
+      const item = JSON.parse(raw);
+      builderIngredients.push({ ...item, id: Date.now(), source: 'ai' });
+      ingEl.value = '';
+      renderBuilderIngredients();
+      status.style.display = 'none';
+    }
+  } catch(err) { flash('Could not estimate — try again'); console.error(err); status.style.display = 'none'; }
   btn.disabled = false; btn.textContent = 'Add';
+}
+
+// Try Open Food Facts by name — returns item object or null
+async function tryOpenFoodFacts(query) {
+  try {
+    // Strip leading quantities/amounts to improve search e.g. "2 cups Fairlife milk" → "Fairlife milk"
+    const searchTerms = query.replace(/^\d+\.?\d*\s*(cups?|tbsp|tsp|oz|g|ml|l|lbs?|grams?|ounces?|tablespoons?|teaspoons?|serving|scoop|slice|piece|handful)s?\s*/i, '').trim();
+    if (searchTerms.length < 3) return null;
+
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(searchTerms)}&search_simple=1&action=process&json=1&page_size=5&fields=product_name,product_name_en,serving_size,nutriments`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    const products = data.products || [];
+
+    // Find best match — must have calorie data
+    for (const p of products) {
+      const n = p.nutriments || {};
+      const cal = n['energy-kcal_serving'] ?? n['energy-kcal_100g'];
+      if (!cal || cal <= 0) continue;
+
+      // Check name similarity — product name must share at least one key word with query
+      const productName = (p.product_name_en || p.product_name || '').toLowerCase();
+      const queryWords  = searchTerms.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const hasMatch    = queryWords.some(w => productName.includes(w));
+      if (!hasMatch) continue;
+
+      const serving  = p.serving_size || '100g';
+      const useServing = n['energy-kcal_serving'] != null;
+      const suffix   = useServing ? '_serving' : '_100g';
+
+      return {
+        name:       p.product_name_en || p.product_name || searchTerms,
+        assumption: serving,
+        calories:   Math.round(n[`energy-kcal${suffix}`] || 0),
+        protein:    Math.round(n[`proteins${suffix}`]    || 0),
+        carbs:      Math.round(n[`carbohydrates${suffix}`] || 0),
+        fat:        Math.round(n[`fat${suffix}`]         || 0),
+        fiber:      Math.round(n[`fiber${suffix}`]       || 0),
+      };
+    }
+    return null; // no good match
+  } catch { return null; }
 }
 
 function removeBuilderIngredient(id) {
@@ -991,7 +1046,7 @@ function renderBuilderIngredients() {
   list.innerHTML = builderIngredients.map(i => `
     <div class="builder-ingredient-row">
       <div class="builder-ingredient-info">
-        <div class="builder-ingredient-name">${i.name}</div>
+        <div class="builder-ingredient-name">${i.name} <span style="font-size:10px;color:var(--text3)">${i.source==='database'?'🗄️ database':'🤖 AI'}</span></div>
         <div class="builder-ingredient-macros">${i.assumption} · ${Math.round(i.calories)} kcal · P ${Math.round(i.protein)}g · C ${Math.round(i.carbs)}g · F ${Math.round(i.fat)}g · Fi ${Math.round(i.fiber||0)}g</div>
       </div>
       <button class="builder-ingredient-del" onclick="removeBuilderIngredient(${i.id})">×</button>

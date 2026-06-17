@@ -1,6 +1,6 @@
 // MacroLog Service Worker
 // Bump VERSION with every release to force iOS to reload
-const VERSION = 'v1.0.9';
+const VERSION = 'v1.1.0';
 const CACHE = `macrolog-${VERSION}`;
 
 // Files to cache for offline use
